@@ -3,7 +3,7 @@ import Foundation
 import IOKit
 import os.log
 
-private let logger = Logger(subsystem: "com.rintaro-nishi.chrysalis", category: "PowerSaving")
+private let logger = Logger(subsystem: "com.j-naish.chrysalis", category: "PowerSaving")
 
 // DisplayServices private framework
 private let displayServicesHandle = dlopen(

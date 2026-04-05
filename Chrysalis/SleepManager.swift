@@ -2,7 +2,7 @@ import Carbon
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: "com.rintaro-nishi.chrysalis", category: "SleepManager")
+private let logger = Logger(subsystem: "com.j-naish.chrysalis", category: "SleepManager")
 
 final class SleepManager {
     private(set) var isEnabled = false
