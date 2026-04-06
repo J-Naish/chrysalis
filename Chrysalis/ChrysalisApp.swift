@@ -39,17 +39,44 @@ struct ChrysalisApp: App {
 }
 
 private func menuBarIcon(active: Bool) -> NSImage {
-    let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
-    let image = NSImage(systemSymbolName: "leaf.fill", accessibilityDescription: "Chrysalis")!
-        .withSymbolConfiguration(config)!
+    let size = NSSize(width: 18, height: 18)
+    let image = NSImage(size: size, flipped: true) { _ in
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
 
-    let size = image.size
-    let result = NSImage(size: size, flipped: false) { rect in
-        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: active ? 1.0 : 0.35)
+        let ellipseRect = CGRect(x: 4, y: 2, width: 10, height: 14)
+
+        // Clip to ellipse so cut bands don't extend beyond
+        ctx.saveGState()
+        ctx.addEllipse(in: ellipseRect)
+        ctx.clip()
+
+        // Compound path: ellipse + cut bands (even-odd removes the bands)
+        let path = CGMutablePath()
+        path.addEllipse(in: ellipseRect)
+
+        // Upper cut band
+        path.move(to: CGPoint(x: 0, y: 6.8))
+        path.addQuadCurve(to: CGPoint(x: 18, y: 6.8), control: CGPoint(x: 9, y: 5))
+        path.addLine(to: CGPoint(x: 18, y: 7.8))
+        path.addQuadCurve(to: CGPoint(x: 0, y: 7.8), control: CGPoint(x: 9, y: 6))
+        path.closeSubpath()
+
+        // Lower cut band
+        path.move(to: CGPoint(x: 0, y: 10.8))
+        path.addQuadCurve(to: CGPoint(x: 18, y: 10.8), control: CGPoint(x: 9, y: 9))
+        path.addLine(to: CGPoint(x: 18, y: 11.8))
+        path.addQuadCurve(to: CGPoint(x: 0, y: 11.8), control: CGPoint(x: 9, y: 10))
+        path.closeSubpath()
+
+        ctx.addPath(path)
+        ctx.setFillColor(CGColor(gray: 0, alpha: active ? 1.0 : 0.35))
+        ctx.fillPath(using: .evenOdd)
+
+        ctx.restoreGState()
         return true
     }
-    result.isTemplate = true
-    return result
+    image.isTemplate = true
+    return image
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
