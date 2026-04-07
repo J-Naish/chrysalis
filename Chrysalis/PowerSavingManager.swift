@@ -32,6 +32,7 @@ struct LidCloseOptions {
 }
 
 final class PowerSavingManager {
+    private let queue = DispatchQueue(label: "com.j-naish.chrysalis.power-saving")
     private var savedBrightness: Float?
     private var savedKeyboardBrightness: Float?
     private var savedVolume: Int?
@@ -40,65 +41,69 @@ final class PowerSavingManager {
     private var bluetoothWasOn: Bool = false
 
     func onLidClosed(_ options: LidCloseOptions) {
-        if options.reduceBrightness {
-            savedBrightness = getDisplayBrightness()
-            setDisplayBrightness(0)
-            logger.info("Brightness saved (\(self.savedBrightness ?? -1)) and set to 0")
-        }
-        if options.disableKeyboardBacklight {
-            savedKeyboardBrightness = getKeyboardBrightness()
-            setKeyboardBrightness(0)
-            logger.info("Keyboard backlight off")
-        }
-        if options.muteAudio {
-            let state = getAudioState()
-            savedVolume = state.volume
-            wasMuted = state.muted
-            if !wasMuted { setMuted(true) }
-            logger.info("Audio muted")
-        }
-        if options.enableDoNotDisturb {
-            dndWasOff = !isDoNotDisturbEnabled()
-            if dndWasOff { setDoNotDisturb(true) }
-            logger.info("Do Not Disturb enabled")
-        }
-        if options.disableBluetooth {
-            bluetoothWasOn = isBluetoothOn()
-            if bluetoothWasOn { setBluetooth(false) }
-            logger.info("Bluetooth disabled")
+        queue.async { [self] in
+            if options.reduceBrightness {
+                savedBrightness = getDisplayBrightness()
+                setDisplayBrightness(0)
+                logger.info("Brightness saved (\(self.savedBrightness ?? -1)) and set to 0")
+            }
+            if options.disableKeyboardBacklight {
+                savedKeyboardBrightness = getKeyboardBrightness()
+                setKeyboardBrightness(0)
+                logger.info("Keyboard backlight off")
+            }
+            if options.muteAudio {
+                let state = getAudioState()
+                savedVolume = state.volume
+                wasMuted = state.muted
+                if !wasMuted { setMuted(true) }
+                logger.info("Audio muted")
+            }
+            if options.enableDoNotDisturb {
+                dndWasOff = !isDoNotDisturbEnabled()
+                if dndWasOff { setDoNotDisturb(true) }
+                logger.info("Do Not Disturb enabled")
+            }
+            if options.disableBluetooth {
+                bluetoothWasOn = isBluetoothOn()
+                if bluetoothWasOn { setBluetooth(false) }
+                logger.info("Bluetooth disabled")
+            }
         }
     }
 
     func onLidOpened(_ options: LidCloseOptions) {
-        if options.reduceBrightness, let brightness = savedBrightness {
-            setDisplayBrightness(brightness)
-            logger.info("Brightness restored to \(brightness)")
-            savedBrightness = nil
-        }
-        if options.disableKeyboardBacklight, let brightness = savedKeyboardBrightness {
-            setKeyboardBrightness(brightness)
-            logger.info("Keyboard backlight restored")
-            savedKeyboardBrightness = nil
-        }
-        if options.muteAudio {
-            if !wasMuted {
-                setMuted(false)
+        queue.async { [self] in
+            if options.reduceBrightness, let brightness = savedBrightness {
+                setDisplayBrightness(brightness)
+                logger.info("Brightness restored to \(brightness)")
+                savedBrightness = nil
             }
-            if let volume = savedVolume {
-                setVolume(volume)
-                savedVolume = nil
+            if options.disableKeyboardBacklight, let brightness = savedKeyboardBrightness {
+                setKeyboardBrightness(brightness)
+                logger.info("Keyboard backlight restored")
+                savedKeyboardBrightness = nil
             }
-            logger.info("Audio restored")
-        }
-        if options.enableDoNotDisturb, dndWasOff {
-            setDoNotDisturb(false)
-            logger.info("Do Not Disturb disabled")
-            dndWasOff = false
-        }
-        if options.disableBluetooth, bluetoothWasOn {
-            setBluetooth(true)
-            logger.info("Bluetooth re-enabled")
-            bluetoothWasOn = false
+            if options.muteAudio {
+                if !wasMuted {
+                    setMuted(false)
+                }
+                if let volume = savedVolume {
+                    setVolume(volume)
+                    savedVolume = nil
+                }
+                logger.info("Audio restored")
+            }
+            if options.enableDoNotDisturb, dndWasOff {
+                setDoNotDisturb(false)
+                logger.info("Do Not Disturb disabled")
+                dndWasOff = false
+            }
+            if options.disableBluetooth, bluetoothWasOn {
+                setBluetooth(true)
+                logger.info("Bluetooth re-enabled")
+                bluetoothWasOn = false
+            }
         }
     }
 
@@ -159,81 +164,68 @@ final class PowerSavingManager {
     }
 
     private func getAudioState() -> AudioState {
-        let script = NSAppleScript(source: """
-            set vol to output volume of (get volume settings)
-            set isMuted to output muted of (get volume settings)
-            return (vol as text) & "," & (isMuted as text)
-            """)
-        var error: NSDictionary?
-        if let result = script?.executeAndReturnError(&error).stringValue {
-            let parts = result.split(separator: ",")
-            let volume = Int(parts.first ?? "50") ?? 50
-            let muted = parts.last == "true"
-            return AudioState(volume: volume, muted: muted)
-        }
-        return AudioState(volume: 50, muted: false)
+        let output = shell("osascript", "-e", "set vol to output volume of (get volume settings)", "-e", "set isMuted to output muted of (get volume settings)", "-e", "return (vol as text) & \",\" & (isMuted as text)")
+        let parts = output.split(separator: ",")
+        let volume = Int(parts.first ?? "50") ?? 50
+        let muted = parts.last == "true"
+        return AudioState(volume: volume, muted: muted)
     }
 
     private func setMuted(_ muted: Bool) {
-        let source = muted
-            ? "set volume with output muted"
-            : "set volume without output muted"
-        var error: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error { logger.error("setMuted failed: \(error)") }
+        let cmd = muted ? "set volume with output muted" : "set volume without output muted"
+        shell("osascript", "-e", cmd)
     }
 
     private func setVolume(_ volume: Int) {
-        var error: NSDictionary?
-        NSAppleScript(source: "set volume output volume \(volume)")?.executeAndReturnError(&error)
-        if let error { logger.error("setVolume failed: \(error)") }
+        shell("osascript", "-e", "set volume output volume \(volume)")
     }
 
     // MARK: - Do Not Disturb
 
     private func isDoNotDisturbEnabled() -> Bool {
-        let script = NSAppleScript(source: """
-            do shell script "defaults read com.apple.controlcenter 'NSStatusItem Visible FocusModes' 2>/dev/null || echo 0"
-            """)
-        var error: NSDictionary?
-        // Approximation - DND state is hard to read reliably
-        let result = script?.executeAndReturnError(&error).stringValue
-        return result == "1"
+        let result = shell("/bin/bash", "-c", "defaults read com.apple.controlcenter 'NSStatusItem Visible FocusModes' 2>/dev/null || echo 0")
+        return result.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
     }
 
     private func setDoNotDisturb(_ enabled: Bool) {
-        let script: String
-        if enabled {
-            script = """
-                do shell script "defaults write com.apple.ncprefs dnd_prefs -data $(echo '<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>dndDisplayLock</key><false/><key>dndDisplaySleep</key><false/><key>dndMirrored</key><false/><key>userPref</key><dict><key>enabled</key><true/></dict></dict></plist>' | plutil -convert binary1 -o - - | xxd -p | tr -d '\\n')"
-                do shell script "killall NotificationCenter 2>/dev/null; killall usernoted 2>/dev/null"
-                """
-        } else {
-            script = """
-                do shell script "defaults write com.apple.ncprefs dnd_prefs -data $(echo '<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>dndDisplayLock</key><false/><key>dndDisplaySleep</key><false/><key>dndMirrored</key><false/><key>userPref</key><dict><key>enabled</key><false/></dict></dict></plist>' | plutil -convert binary1 -o - - | xxd -p | tr -d '\\n')"
-                do shell script "killall NotificationCenter 2>/dev/null; killall usernoted 2>/dev/null"
-                """
-        }
-        var error: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&error)
+        let flag = enabled ? "true" : "false"
+        let plist = """
+            <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>dndDisplayLock</key><false/><key>dndDisplaySleep</key><false/><key>dndMirrored</key><false/><key>userPref</key><dict><key>enabled</key><\(flag)/></dict></dict></plist>
+            """
+        shell("/bin/bash", "-c", "echo '\(plist)' | plutil -convert binary1 -o - - | xxd -p | tr -d '\\n' | xargs -I{} defaults write com.apple.ncprefs dnd_prefs -data {}")
+        shell("/usr/bin/killall", "NotificationCenter")
+        shell("/usr/bin/killall", "usernoted")
     }
 
     // MARK: - Bluetooth
 
     private func isBluetoothOn() -> Bool {
-        let script = NSAppleScript(source: """
-            do shell script "defaults read /Library/Preferences/com.apple.Bluetooth ControllerPowerState 2>/dev/null || echo 1"
-            """)
-        var error: NSDictionary?
-        return script?.executeAndReturnError(&error).stringValue == "1"
+        let result = shell("/bin/bash", "-c", "defaults read /Library/Preferences/com.apple.Bluetooth ControllerPowerState 2>/dev/null || echo 1")
+        return result.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
     }
 
     private func setBluetooth(_ on: Bool) {
-        // Use blueutil if available, otherwise fall back to defaults + kill
-        let script = NSAppleScript(source: """
-            do shell script "if command -v blueutil >/dev/null; then blueutil --power \(on ? "1" : "0"); else defaults write /Library/Preferences/com.apple.Bluetooth ControllerPowerState -int \(on ? 1 : 0); killall -HUP bluetoothd 2>/dev/null; fi"
-            """)
-        var error: NSDictionary?
-        script?.executeAndReturnError(&error)
+        let flag = on ? "1" : "0"
+        shell("/bin/bash", "-c", "if command -v blueutil >/dev/null; then blueutil --power \(flag); else defaults write /Library/Preferences/com.apple.Bluetooth ControllerPowerState -int \(flag); killall -HUP bluetoothd 2>/dev/null; fi")
+    }
+
+    // MARK: - Shell Helper
+
+    @discardableResult
+    private func shell(_ args: String...) -> String {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: args[0])
+        process.arguments = Array(args.dropFirst())
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            logger.error("shell failed: \(error)")
+            return ""
+        }
+        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     }
 }
