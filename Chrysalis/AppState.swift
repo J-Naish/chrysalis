@@ -60,7 +60,13 @@ final class AppState: ObservableObject {
     }
 
     init() {
-        // Always start with sleep prevention OFF
+        // Check actual system state on launch to handle crash recovery
+        let systemSleepDisabled = sleepManager.isSystemSleepDisabled()
+        if systemSleepDisabled {
+            // pmset disablesleep was left on (e.g. after crash) — clean it up
+            sleepManager.isEnabled = true
+            _ = sleepManager.disable()
+        }
         _isPreventingSleep = Published(initialValue: false)
         UserDefaults.standard.set(false, forKey: "isPreventingSleep")
         _launchAtLogin = Published(initialValue: SMAppService.mainApp.status == .enabled)

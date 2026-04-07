@@ -66,7 +66,11 @@ final class PowerSavingManager {
             }
             if options.disableBluetooth {
                 bluetoothWasOn = isBluetoothOn()
-                if bluetoothWasOn { setBluetooth(false) }
+                if bluetoothWasOn {
+                    if !setBluetooth(false) {
+                        bluetoothWasOn = false  // Don't try to restore on open if disable failed
+                    }
+                }
                 logger.info("Bluetooth disabled")
             }
         }
@@ -164,8 +168,8 @@ final class PowerSavingManager {
     }
 
     private func getAudioState() -> AudioState {
-        let output = shell("osascript", "-e", "set vol to output volume of (get volume settings)", "-e", "set isMuted to output muted of (get volume settings)", "-e", "return (vol as text) & \",\" & (isMuted as text)")
-        let parts = output.split(separator: ",")
+        let result = shell("osascript", "-e", "set vol to output volume of (get volume settings)", "-e", "set isMuted to output muted of (get volume settings)", "-e", "return (vol as text) & \",\" & (isMuted as text)")
+        let parts = result.output.split(separator: ",")
         let volume = Int(parts.first ?? "50") ?? 50
         let muted = parts.last == "true"
         return AudioState(volume: volume, muted: muted)
@@ -184,7 +188,7 @@ final class PowerSavingManager {
 
     private func isDoNotDisturbEnabled() -> Bool {
         let result = shell("/bin/bash", "-c", "defaults read com.apple.controlcenter 'NSStatusItem Visible FocusModes' 2>/dev/null || echo 0")
-        return result.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+        return result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
     }
 
     private func setDoNotDisturb(_ enabled: Bool) {
@@ -201,18 +205,29 @@ final class PowerSavingManager {
 
     private func isBluetoothOn() -> Bool {
         let result = shell("/bin/bash", "-c", "defaults read /Library/Preferences/com.apple.Bluetooth ControllerPowerState 2>/dev/null || echo 1")
-        return result.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+        return result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
     }
 
-    private func setBluetooth(_ on: Bool) {
+    @discardableResult
+    private func setBluetooth(_ on: Bool) -> Bool {
         let flag = on ? "1" : "0"
-        shell("/bin/bash", "-c", "if command -v blueutil >/dev/null; then blueutil --power \(flag); else defaults write /Library/Preferences/com.apple.Bluetooth ControllerPowerState -int \(flag); killall -HUP bluetoothd 2>/dev/null; fi")
+        let result = shell("/bin/bash", "-c", "if command -v blueutil >/dev/null; then blueutil --power \(flag); else defaults write /Library/Preferences/com.apple.Bluetooth ControllerPowerState -int \(flag) && killall -HUP bluetoothd 2>/dev/null; fi")
+        if !result.success {
+            logger.warning("Bluetooth control failed (exit \(result.exitCode)) — may require blueutil or admin privileges")
+        }
+        return result.success
     }
 
     // MARK: - Shell Helper
 
+    private struct ShellResult {
+        let output: String
+        let exitCode: Int32
+        var success: Bool { exitCode == 0 }
+    }
+
     @discardableResult
-    private func shell(_ args: String...) -> String {
+    private func shell(_ args: String...) -> ShellResult {
         let process = Process()
         let pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: args[0])
@@ -224,8 +239,9 @@ final class PowerSavingManager {
             process.waitUntilExit()
         } catch {
             logger.error("shell failed: \(error)")
-            return ""
+            return ShellResult(output: "", exitCode: -1)
         }
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return ShellResult(output: output, exitCode: process.terminationStatus)
     }
 }

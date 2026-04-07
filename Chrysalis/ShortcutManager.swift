@@ -25,7 +25,9 @@ struct KeyCombo: Codable, Equatable, Sendable {
     }
 
     var keyEquivalent: KeyEquivalent? {
-        guard let name = Self.keyName(for: keyCode), let char = name.lowercased().first else { return nil }
+        guard let name = Self.keyName(for: keyCode) else { return nil }
+        // Only single-character keys can map to KeyEquivalent
+        guard name.count == 1, let char = name.lowercased().first else { return nil }
         return KeyEquivalent(char)
     }
 
