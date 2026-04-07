@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        guard UserDefaults.standard.bool(forKey: "isPreventingSleep") else { return }
         // Best-effort cleanup: reset pmset disablesleep
         let source = """
             do shell script "pmset disablesleep 0" \

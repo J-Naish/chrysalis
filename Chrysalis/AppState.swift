@@ -62,6 +62,7 @@ final class AppState: ObservableObject {
     init() {
         // Always start with sleep prevention OFF
         _isPreventingSleep = Published(initialValue: false)
+        UserDefaults.standard.set(false, forKey: "isPreventingSleep")
         _launchAtLogin = Published(initialValue: SMAppService.mainApp.status == .enabled)
 
         _reduceBrightness = Published(initialValue: UserDefaults.standard.object(forKey: "reduceBrightness") as? Bool ?? true)
