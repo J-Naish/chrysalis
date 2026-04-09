@@ -21,7 +21,7 @@ Built for developers who use [Claude Code](https://docs.anthropic.com/en/docs/cl
 ## Features
 
 - **Sleep Prevention** — Toggle system sleep on/off from the menu bar using `pmset disablesleep`
-- **Global Keyboard Shortcut** — Quick toggle with a customizable hotkey (default: `⌃⌥E`)
+- **Global Keyboard Shortcut** — Quick toggle with a customizable hotkey (default: `⌃⌥C`)
 - **Lid Close Actions** — Automatically perform actions when the lid closes:
   - Reduce display brightness
   - Turn off keyboard backlight

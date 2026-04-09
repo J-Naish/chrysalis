@@ -7,7 +7,7 @@ struct KeyCombo: Codable, Equatable, Sendable {
     let modifiers: UInt
 
     static let `default` = KeyCombo(
-        keyCode: 0x0E, // E
+        keyCode: 0x08, // C
         modifiers: NSEvent.ModifierFlags([.control, .option]).rawValue
     )
 
