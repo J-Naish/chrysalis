@@ -6,6 +6,11 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 xcuserdata/
 
+# Xcode Distribute App exports (folders like "Chrysalis 2026-04-14 13-42-54")
+Chrysalis [0-9]*/
+*.dmg
+*.zip
+
 # Swift Package Manager
 .build/
 Packages/
